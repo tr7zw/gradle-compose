@@ -1,4 +1,4 @@
-package dev.tr7zw.gradle_compose;
+package dev.tr7zw.gradle_compose.provider;
 
 import java.io.File;
 import java.io.FileInputStream;

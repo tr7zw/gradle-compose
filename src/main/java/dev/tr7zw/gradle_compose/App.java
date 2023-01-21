@@ -11,11 +11,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.fusesource.jansi.AnsiConsole;
@@ -23,6 +22,9 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 
 import dev.tr7zw.gradle_compose.ComposeData.Project;
+import dev.tr7zw.gradle_compose.provider.GithubProvider;
+import dev.tr7zw.gradle_compose.provider.LocalSourceProvider;
+import dev.tr7zw.gradle_compose.provider.SourceProvider;
 
 public class App {
     public final String version = "0.0.1";
@@ -41,6 +43,7 @@ public class App {
         addAutoReplacements(data);
         SourceProvider provider = getProvider(data);
         processComposition(data, provider);
+        provider.markAsDone();
     }
 
     private void setup() {
@@ -153,8 +156,8 @@ public class App {
             System.out.println(ansi().fgRed().a("No source defined!").reset());
             System.exit(1);
         }
-        if(data.source.startsWith("https://github.com/")) {
-            String url = data.source.replace("https://github.com", "https://raw.githubusercontent.com/");
+        if(data.source.toLowerCase().startsWith("https://github.com/")) {
+            String url = data.source.toLowerCase().replace("https://github.com", "https://raw.githubusercontent.com");
             if(!url.endsWith("/")) {
                 url = url + "/";
             }
