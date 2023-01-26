@@ -1,48 +1,33 @@
 package dev.tr7zw.gradle_compose;
 
-import static org.fusesource.jansi.Ansi.ansi;
-
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.fusesource.jansi.AnsiConsole;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
 
 import dev.tr7zw.gradle_compose.ComposeData.Project;
-import dev.tr7zw.gradle_compose.provider.GithubProvider;
-import dev.tr7zw.gradle_compose.provider.LocalSourceProvider;
 import dev.tr7zw.gradle_compose.provider.SourceProvider;
+import dev.tr7zw.gradle_compose.util.ConfigUtil;
+import dev.tr7zw.gradle_compose.util.FileProcessingUtil;
+import dev.tr7zw.gradle_compose.util.FileUtil;
 
 public class App {
-    public final String version = "0.0.1";
+    public final String version = "0.0.2";
 
     public static void main(String[] args) {
         new App().run(args);
     }
 
-    private Yaml yaml = new Yaml(new Constructor(ComposeData.class));
-    private Yaml yamlSet = new Yaml(new Constructor(HashSet.class));
-
     public void run(String[] args) {
         setup();
         printWelcome();
-        ComposeData data = loadConfig();
+        ComposeData data = ConfigUtil.loadLocalConfig();
         addAutoReplacements(data);
-        SourceProvider provider = getProvider(data);
-        processComposition(data, provider);
+        SourceProvider provider = FileUtil.getProvider(data);
+        TemplateData template = ConfigUtil.getTemplateData(provider, data);
+        processComposition(data, template, provider);
         provider.markAsDone();
     }
 
@@ -56,171 +41,55 @@ public class App {
 
     private void addAutoReplacements(ComposeData data) {
         StringBuilder includes = new StringBuilder();
-        for(String entry : data.subProjects.keySet()) {
+        for (String entry : data.subProjects.keySet()) {
             includes.append("include(\"" + entry + "\")\n");
         }
         data.replacements.put("autoincludes", includes.toString());
         StringBuilder githubWorkFlow = new StringBuilder();
-        for(String entry : data.subProjects.keySet()) {
+        for (String entry : data.subProjects.keySet()) {
             githubWorkFlow.append("            " + entry + "/build/libs/*\n");
         }
         data.replacements.put("autoworkflowfiles", githubWorkFlow.toString());
     }
-    
-    private void processComposition(ComposeData data, SourceProvider provider) {
+
+    private void processComposition(ComposeData data, TemplateData template, SourceProvider provider) {
         // copy in ./gradle files
-        copyIfAvailable(provider, "gradle/wrapper/gradle-wrapper.properties");
-        copyIfAvailable(provider, "gradle/wrapper/gradle-wrapper.jar");
-        updateProject(new File("."), data, provider, data.rootProject);
-        for(Entry<String, Project> entry : data.subProjects.entrySet()) {
-            updateProject(new File(".", entry.getKey()), data, provider, entry.getValue());
+        FileUtil.copyIfAvailable(provider, "gradle/wrapper/gradle-wrapper.properties");
+        FileUtil.copyIfAvailable(provider, "gradle/wrapper/gradle-wrapper.jar");
+        Map<String, String> baseReplacements = FileProcessingUtil.mergeReplacements(data.replacements,
+                template.defaultReplacements);
+        updateProject(new File("."), baseReplacements, provider, data.rootProject);
+        for (Entry<String, Project> entry : data.subProjects.entrySet()) {
+            updateProject(new File(".", entry.getKey()), baseReplacements, provider, entry.getValue());
         }
-        Set<String> customEntries = readCustomList(provider, "custom.compose");
-        for(String name : customEntries) {
-            copyIfAvailableWithReplacments(provider, new File("."), data.rootProject.template, name, data.rootProject.replacements,
-                    data.replacements);
-        }
-    }
-
-    private void updateProject(File baseDir, ComposeData data, SourceProvider provider, Project project) {
-        copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/build.yml", project.replacements,
-                data.replacements);
-        copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/tag.yml", project.replacements,
-                data.replacements);
-        copyIfAvailableWithReplacments(provider, baseDir, project.template, "build.gradle", project.replacements,
-                data.replacements);
-        copyIfAvailableWithReplacments(provider, baseDir, project.template, "gradle.properties", project.replacements,
-                data.replacements);
-        copyIfAvailableWithReplacments(provider, baseDir, project.template, "settings.gradle", project.replacements,
-                data.replacements);
-    }
-
-    private void copyIfAvailableWithReplacments(SourceProvider provider, File baseDir, String path, String file,
-            Map<String, String> targetReplacement, Map<String, String> globalReplacements) {
-        if (!provider.hasFile(path + "/" + file)) {
-            return;
-        }
-        File target = new File(baseDir, file);
-        if (target.exists()) {
-            target.delete();
-        }
-        target.getParentFile().mkdirs();
-        try (InputStream in = provider.getStream(path + "/" + file)) {
-            String data = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))
-                    .lines().collect(Collectors.joining("\n"));
-            data = applyReplacements(data, targetReplacement);
-            data = applyReplacements(data, globalReplacements);
-            Files.write(target.toPath(), data.getBytes());
-            //System.out.println(data);
-            System.out.println("Wrote '" + target.getAbsolutePath() + "'...");
-        } catch (Exception e) {
-            System.out.println(ansi().fgRed().a("Error while copying '" + file + "'!").reset());
-            e.printStackTrace();
-            System.exit(1);
-            return;
-        }
-    }
-
-    private String applyReplacements(String text, Map<String, String> replacements) {
-        for (Entry<String, String> entry : replacements.entrySet()) {
-            String toReplace = "$" + entry.getKey() + "$";
-            while (text.indexOf(toReplace) >= 0) {
-                text = text.replace(toReplace, entry.getValue());
+        if (data.version.equals("0.0.1")) {
+            Set<String> customEntries = ConfigUtil.readCustomList(provider, "custom.compose");
+            for (String name : customEntries) {
+                FileUtil.copyIfAvailableWithReplacments(provider, new File("."), data.rootProject.template, name,
+                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements));
+            }
+        } else {
+            for (String name : template.customEntries) {
+                FileUtil.copyIfAvailableWithReplacments(provider, new File("."), data.rootProject.template, name,
+                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements));
             }
         }
-        return text;
     }
 
-    private void copyIfAvailable(SourceProvider provider, String file) {
-        if (!provider.hasFile(file)) {
-            return;
-        }
-        File target = new File(file);
-        if (target.exists()) {
-            target.delete();
-        }
-        target.getParentFile().mkdirs();
-        try (InputStream in = provider.getStream(file)) {
-            Files.copy(in, target.toPath());
-            System.out.println("Copied '" + target.getAbsolutePath() + "'...");
-        } catch (Exception e) {
-            System.out.println(ansi().fgRed().a("Error while copying '" + file + "'!").reset());
-            e.printStackTrace();
-            System.exit(1);
-            return;
-        }
-    }
-
-    private SourceProvider getProvider(ComposeData data) {
-        if (data.source == null) {
-            System.out.println(ansi().fgRed().a("No source defined!").reset());
-            System.exit(1);
-        }
-        if(data.source.toLowerCase().startsWith("https://github.com/")) {
-            String url = data.source.toLowerCase().replace("https://github.com", "https://raw.githubusercontent.com");
-            if(!url.endsWith("/")) {
-                url = url + "/";
-            }
-            url = url.replace("/tree/", "/");
-            return new GithubProvider(url);
-        }
-        File folder = new File(data.source);
-        if (!folder.exists()) {
-            System.out.println(ansi().fgRed().a("Folder '" + folder.getAbsolutePath() + "' not found!").reset());
-            System.exit(1);
-        }
-        return new LocalSourceProvider(folder);
-    }
-
-    private ComposeData loadConfig() {
-        File settingsFile = new File("gradle-compose.yml");
-        if (!settingsFile.exists()) {
-            System.out.println(ansi().fgRed().a("'" + settingsFile.getAbsolutePath() + "' not found!").reset());
-            System.exit(1);
-            return null;
-        }
-        ComposeData compose = null;
-        try {
-            compose = yaml.load(new FileInputStream(settingsFile));
-        } catch (FileNotFoundException e) {
-            System.out
-                    .println(ansi().fgRed().a("Error while loading '" + settingsFile.getAbsolutePath() + "'!").reset());
-            e.printStackTrace();
-            System.exit(1);
-            return null;
-        }
-        if (compose == null) {
-            System.out.println(
-                    ansi().fgRed().a("'" + settingsFile.getAbsolutePath() + "' wasn't parsed successfully!").reset());
-            System.exit(1);
-        }
-        if (!"0.0.1".equals(compose.version)) {
-            System.out.println(ansi().fgRed().a("Incompatible version defined! Please update gradle-compose!").reset());
-            System.exit(1);
-        }
-        return compose;
-    }
-    
-    private Set<String> readCustomList(SourceProvider provider, String file) {
-        if (!provider.hasFile(file)) {
-            return new HashSet<String>();
-        }
-
-        Set<String> set = null;
-
-        try (InputStream in = provider.getStream(file)) {
-            set = yamlSet.load(in);
-        } catch (FileNotFoundException e) {
-            // ignore
-        } catch (IOException e) {
-            System.out.println(ansi().fgRed().a("Error while reading '" + file + "'!").reset());
-            e.printStackTrace();
-            System.exit(1);
-        }
-        if(set == null) {
-            return new HashSet<String>();
-        }
-        return set;
+    private void updateProject(File baseDir, Map<String, String> replacements, SourceProvider provider,
+            Project project) {
+        Map<String, String> projectReplacements = FileProcessingUtil.mergeReplacements(project.replacements,
+                replacements);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/build.yml",
+                projectReplacements);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/tag.yml",
+                projectReplacements);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "build.gradle",
+                projectReplacements);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "gradle.properties",
+                projectReplacements);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "settings.gradle",
+                projectReplacements);
     }
 
 }
