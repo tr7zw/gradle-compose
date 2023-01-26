@@ -80,9 +80,11 @@ public class App {
             Project project, Set<String> availableTags, Set<String> enabledTags) {
         Map<String, String> projectReplacements = FileProcessingUtil.mergeReplacements(project.replacements,
                 replacements);
-        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/build.yml",
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "github/workflows/build.yml", ".github/workflows/build.yml",
                 projectReplacements, availableTags, enabledTags);
-        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/tag.yml",
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "github/workflows/tag.yml", ".github/workflows/tag.yml",
+                projectReplacements, availableTags, enabledTags);
+        FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "github/FUNDING.yml", ".github/FUNDING.yml",
                 projectReplacements, availableTags, enabledTags);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "build.gradle",
                 projectReplacements, availableTags, enabledTags);

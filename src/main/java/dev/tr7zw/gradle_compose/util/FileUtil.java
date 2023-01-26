@@ -22,15 +22,15 @@ public final class FileUtil {
     private FileUtil() {
         // private
     }
-    
+
     public static void delete(File file) {
-        if(file.isDirectory()) {
-            for(File f : file.listFiles())
+        if (file.isDirectory()) {
+            for (File f : file.listFiles())
                 delete(f);
         }
         file.delete();
     }
-    
+
     public static SourceProvider getProvider(ComposeData data) {
         if (data.source == null) {
             System.out.println(ansi().fgRed().a("No source defined!").reset());
@@ -51,7 +51,7 @@ public final class FileUtil {
         }
         return new LocalSourceProvider(folder);
     }
-    
+
     public static void copyIfAvailable(SourceProvider provider, String file) {
         if (!provider.hasFile(file)) {
             return;
@@ -71,25 +71,30 @@ public final class FileUtil {
             return;
         }
     }
-    
+
     public static void copyIfAvailableWithReplacments(SourceProvider provider, File baseDir, String path, String file,
             Map<String, String> replacement, Set<String> availableTags, Set<String> enabledTags) {
+        copyIfAvailableWithReplacments(provider, baseDir, path, file, file, replacement, availableTags, enabledTags);
+    }
+
+    public static void copyIfAvailableWithReplacments(SourceProvider provider, File baseDir, String path, String file,
+            String outFile, Map<String, String> replacement, Set<String> availableTags, Set<String> enabledTags) {
         if (!provider.hasFile(path + "/" + file)) {
             return;
         }
-        File target = new File(baseDir, file);
+        File target = new File(baseDir, outFile);
         if (target.exists()) {
             target.delete();
         }
         target.getParentFile().mkdirs();
         try (InputStream in = provider.getStream(path + "/" + file)) {
-            String data = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))
-                    .lines().collect(Collectors.joining("\n"));
+            String data = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)).lines()
+                    .collect(Collectors.joining("\n"));
             data = FileProcessingUtil.applyReplacements(data, replacement);
             data = FileProcessingUtil.processTags(data, availableTags, enabledTags);
             data = FileProcessingUtil.cleanFile(target.getName(), data);
             Files.write(target.toPath(), data.getBytes());
-            //System.out.println(data);
+            // System.out.println(data);
             System.out.println("Wrote '" + target.getAbsolutePath() + "'...");
         } catch (Exception e) {
             System.out.println(ansi().fgRed().a("Error while copying '" + file + "'!").reset());
@@ -98,5 +103,5 @@ public final class FileUtil {
             return;
         }
     }
-    
+
 }
