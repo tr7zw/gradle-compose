@@ -58,38 +58,38 @@ public class App {
         FileUtil.copyIfAvailable(provider, "gradle/wrapper/gradle-wrapper.jar");
         Map<String, String> baseReplacements = FileProcessingUtil.mergeReplacements(data.replacements,
                 template.defaultReplacements);
-        updateProject(new File("."), baseReplacements, provider, data.rootProject);
+        updateProject(new File("."), baseReplacements, provider, data.rootProject, template.availableFlags, data.enabledFlags);
         for (Entry<String, Project> entry : data.subProjects.entrySet()) {
-            updateProject(new File(".", entry.getKey()), baseReplacements, provider, entry.getValue());
+            updateProject(new File(".", entry.getKey()), baseReplacements, provider, entry.getValue(), template.availableFlags, data.enabledFlags);
         }
         if (data.version.equals("0.0.1")) {
             Set<String> customEntries = ConfigUtil.readCustomList(provider, "custom.compose");
             for (String name : customEntries) {
                 FileUtil.copyIfAvailableWithReplacments(provider, new File("."), data.rootProject.template, name,
-                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements));
+                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements), template.availableFlags, data.enabledFlags);
             }
         } else {
             for (String name : template.customEntries) {
                 FileUtil.copyIfAvailableWithReplacments(provider, new File("."), data.rootProject.template, name,
-                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements));
+                        FileProcessingUtil.mergeReplacements(data.rootProject.replacements, baseReplacements), template.availableFlags, data.enabledFlags);
             }
         }
     }
 
     private void updateProject(File baseDir, Map<String, String> replacements, SourceProvider provider,
-            Project project) {
+            Project project, Set<String> availableTags, Set<String> enabledTags) {
         Map<String, String> projectReplacements = FileProcessingUtil.mergeReplacements(project.replacements,
                 replacements);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/build.yml",
-                projectReplacements);
+                projectReplacements, availableTags, enabledTags);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, ".github/workflows/tag.yml",
-                projectReplacements);
+                projectReplacements, availableTags, enabledTags);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "build.gradle",
-                projectReplacements);
+                projectReplacements, availableTags, enabledTags);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "gradle.properties",
-                projectReplacements);
+                projectReplacements, availableTags, enabledTags);
         FileUtil.copyIfAvailableWithReplacments(provider, baseDir, project.template, "settings.gradle",
-                projectReplacements);
+                projectReplacements, availableTags, enabledTags);
     }
 
 }

@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import dev.tr7zw.gradle_compose.ComposeData;
@@ -72,7 +73,7 @@ public final class FileUtil {
     }
     
     public static void copyIfAvailableWithReplacments(SourceProvider provider, File baseDir, String path, String file,
-            Map<String, String> replacement) {
+            Map<String, String> replacement, Set<String> availableTags, Set<String> enabledTags) {
         if (!provider.hasFile(path + "/" + file)) {
             return;
         }
@@ -85,6 +86,8 @@ public final class FileUtil {
             String data = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))
                     .lines().collect(Collectors.joining("\n"));
             data = FileProcessingUtil.applyReplacements(data, replacement);
+            data = FileProcessingUtil.processTags(data, availableTags, enabledTags);
+            data = FileProcessingUtil.cleanFile(target.getName(), data);
             Files.write(target.toPath(), data.getBytes());
             //System.out.println(data);
             System.out.println("Wrote '" + target.getAbsolutePath() + "'...");
