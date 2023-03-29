@@ -50,6 +50,11 @@ public class App {
             githubWorkFlow.append("            " + entry + "/build/libs/*\n");
         }
         data.replacements.put("autoworkflowfiles", githubWorkFlow.toString());
+        StringBuilder forkGithubWorkFlow = new StringBuilder();
+        for (String entry : data.subProjects.keySet()) {
+            forkGithubWorkFlow.append("            workspace/" + entry + "/build/libs/*\n");
+        }
+        data.replacements.put("githubautoworkflowfiles", forkGithubWorkFlow.toString());
     }
 
     private void processComposition(ComposeData data, TemplateData template, SourceProvider provider) {
