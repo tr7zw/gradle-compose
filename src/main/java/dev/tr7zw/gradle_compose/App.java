@@ -14,7 +14,7 @@ import dev.tr7zw.gradle_compose.util.FileProcessingUtil;
 import dev.tr7zw.gradle_compose.util.FileUtil;
 
 public class App {
-    public final String version = "0.0.2";
+    public final String version = "0.0.3";
 
     public static void main(String[] args) {
         new App().run(args);

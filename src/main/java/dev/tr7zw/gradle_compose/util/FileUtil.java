@@ -83,9 +83,6 @@ public final class FileUtil {
             return;
         }
         File target = new File(baseDir, outFile);
-        if (target.exists()) {
-            target.delete();
-        }
         target.getParentFile().mkdirs();
         try (InputStream in = provider.getStream(path + "/" + file)) {
             String data = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)).lines()
@@ -93,6 +90,16 @@ public final class FileUtil {
             data = FileProcessingUtil.applyReplacements(data, replacement);
             data = FileProcessingUtil.processTags(data, availableTags, enabledTags);
             data = FileProcessingUtil.cleanFile(target.getName(), data);
+            if(Files.exists(target.toPath())) {
+                String cur = new String(Files.readAllBytes(target.toPath()));
+                if(cur.replace("\r\n", "\n").equals(data.replace("\r\n", "\n"))) {
+                    System.out.println("Skipping '" + target.getAbsolutePath() + "'...");
+                    return;
+                }
+            }
+            if (target.exists()) {
+                target.delete();
+            }
             Files.write(target.toPath(), data.getBytes());
             // System.out.println(data);
             System.out.println("Wrote '" + target.getAbsolutePath() + "'...");

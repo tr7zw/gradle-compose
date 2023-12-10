@@ -74,6 +74,7 @@ public final class ConfigUtil {
             System.out.println(
                     ansi().fgRed().a("'" + settingsFile.getAbsolutePath() + "' wasn't parsed successfully!").reset());
             System.exit(1);
+            return null;
         }
         if (!("0.0.1".equals(compose.version) || "0.0.2".equals(compose.version))) {
             System.out.println(ansi().fgRed().a("Incompatible version defined! Please update gradle-compose!").reset());
