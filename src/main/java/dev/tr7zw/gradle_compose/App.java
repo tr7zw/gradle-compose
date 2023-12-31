@@ -1,20 +1,30 @@
 package dev.tr7zw.gradle_compose;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
 import org.fusesource.jansi.AnsiConsole;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
+
 import dev.tr7zw.gradle_compose.ComposeData.Project;
 import dev.tr7zw.gradle_compose.provider.SourceProvider;
 import dev.tr7zw.gradle_compose.util.ConfigUtil;
 import dev.tr7zw.gradle_compose.util.FileProcessingUtil;
 import dev.tr7zw.gradle_compose.util.FileUtil;
+import dev.tr7zw.gradle_compose.util.GitUtil;
 
 public class App {
-    public final String version = "0.0.3";
+    public final String version = "0.0.4";
 
     public static void main(String[] args) {
         new App().run(args);
@@ -23,10 +33,11 @@ public class App {
     public void run(String[] args) {
         setup();
         printWelcome();
+        applyExecFlag();
         ComposeData data = ConfigUtil.loadLocalConfig();
-        addAutoReplacements(data);
         SourceProvider provider = FileUtil.getProvider(data);
         TemplateData template = ConfigUtil.getTemplateData(provider, data);
+        addAutoReplacements(data);
         processComposition(data, template, provider);
         provider.markAsDone();
     }
@@ -37,6 +48,13 @@ public class App {
 
     private void printWelcome() {
         System.out.println("Loading gradle-compose V" + version + "...");
+    }
+    
+    private void applyExecFlag() {
+        if(GitUtil.gitAvailable()) {
+            System.out.println("Update exec flag of gradlecw...");
+            GitUtil.runGitCommand(new File("."), new String[] {"git", "add", "--chmod=+x", "./gradlecw"});
+        }
     }
 
     private void addAutoReplacements(ComposeData data) {
@@ -55,6 +73,58 @@ public class App {
             forkGithubWorkFlow.append("            workspace/" + entry + "/build/libs/*\n");
         }
         data.replacements.put("githubautoworkflowfiles", forkGithubWorkFlow.toString());
+        
+        if(data.enabledFlags.contains("autopublish") && new File("settings.json").exists()) {
+        	StringBuilder releaseText = new StringBuilder();
+        	try {
+				JsonObject settingsData = new Gson().fromJson(new InputStreamReader(new FileInputStream(new File("settings.json"))), JsonObject.class);
+				for(JsonElement el : settingsData.get("versions").getAsJsonArray()) {
+					String version = el.getAsString();
+					if(data.enabledFlags.contains("curseforge")) {
+						// Curseforge releases
+						releaseText.append("      - name: Publish-" + version + "-Curseforge\n");
+						releaseText.append("        uses: Kir-Antipov/mc-publish@v3.2\n");
+						releaseText.append("        with:\n");
+						releaseText.append("          curseforge-id: " + data.replacements.get("curseforgeid") + "\n");
+						releaseText.append("          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}\n");
+						releaseText.append("          loaders: " + getModloaderName(version).toLowerCase() + "\n");
+						releaseText.append("          name: ${{github.ref_name}}-" + getMCVersion(version) + " - " + getModloaderName(version)+ "\n");
+						if(isForgelike(version)) {
+							releaseText.append("          version-type: beta\n");
+						}
+						releaseText.append("          files: 'versions/" + version + "/build/libs/!(*-@(dev|sources|javadoc|all)).jar'\n");
+						releaseText.append("          game-versions: " + getMCVersion(version) + "\n");
+					}
+					if(data.enabledFlags.contains("modrinth")) {
+						// Modrinth releases
+						releaseText.append("      - name: Publish-" + version + "-Modrinth\n");
+						releaseText.append("        uses: Kir-Antipov/mc-publish@v3.2\n");
+						releaseText.append("        with:\n");
+						releaseText.append("          modrinth-id: " + data.replacements.get("modrinthid") + "\n");
+						releaseText.append("          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}\n");
+						releaseText.append("          loaders: " + getModloaderName(version).toLowerCase() + "\n");
+						releaseText.append("          name: ${{github.ref_name}} - " + getModloaderName(version)+ "\n");
+						releaseText.append("          files: 'versions/" + version + "/build/libs/!(*-@(dev|sources|javadoc|all)).jar'\n");
+						releaseText.append("          game-versions: " + getMCVersion(version) + "\n");
+					}
+				}
+				data.replacements.put("autoreleasesteps", releaseText.toString());
+			} catch (JsonSyntaxException | JsonIOException | FileNotFoundException e) {
+				e.printStackTrace();
+			}
+        }
+    }
+    
+    private String getMCVersion(String version) {
+    	return version.split("-")[0];
+    }
+    
+    private String getModloaderName(String version) {
+    	return version.toLowerCase().contains("fabric") ? "Fabric" : version.toLowerCase().contains("neoforge") ? "NeoForge" : "Forge";
+    }
+    
+    private boolean isForgelike(String version) {
+    	return version.toLowerCase().contains("forge");
     }
 
     private void processComposition(ComposeData data, TemplateData template, SourceProvider provider) {
